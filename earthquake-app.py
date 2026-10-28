@@ -231,9 +231,14 @@ if not filtered_realtime.empty:
     )
 
     st.plotly_chart(
-        fig_realtime,
-        use_container_width=True
-    )
+    fig_realtime,
+    use_container_width=True,
+    config={
+        "scrollZoom": False,
+        "displayModeBar": True
+    },
+    key="realtime_map"
+)
 
 else:
     st.info("No earthquakes match the selected magnitude filter.")
@@ -275,9 +280,14 @@ if show_historical:
         )
 
         st.plotly_chart(
-            fig_historical,
-            use_container_width=True
-        )
+    fig_historical,
+    use_container_width=True,
+    config={
+        "scrollZoom": False,
+        "displayModeBar": True
+    },
+    key="historical_map"
+)
 
     else:
         st.info("No historical earthquakes match the selected filter.")
