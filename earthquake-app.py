@@ -1,4 +1,4 @@
-```python
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -395,4 +395,3 @@ st.markdown("---")
 if st.button("🔄 Refresh Earthquake Data Now"):
     st.cache_data.clear()
     st.rerun()
-```
