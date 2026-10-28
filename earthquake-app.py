@@ -1,22 +1,21 @@
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import requests
-from datetime import datetime, timezone
+from datetime import datetime
 
-# -----------------------------------
+# ==========================================
 # PAGE CONFIGURATION
-# -----------------------------------
+# ==========================================
 st.set_page_config(
-    page_title="Real-Time Earthquake Monitor",
+    page_title="Earthquake Intelligence Dashboard",
     page_icon="🌍",
     layout="wide"
 )
 
-# -----------------------------------
-# USGS API LINKS
-# -----------------------------------
+# ==========================================
+# USGS API URLS
+# ==========================================
 REALTIME_URL = (
     "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson"
 )
@@ -25,9 +24,9 @@ HISTORICAL_URL = (
     "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_month.geojson"
 )
 
-# -----------------------------------
-# FETCH EARTHQUAKE DATA
-# -----------------------------------
+# ==========================================
+# EARTHQUAKE DATA FETCHING
+# ==========================================
 @st.cache_data(ttl=60)
 def fetch_earthquake_data(url):
 
@@ -57,10 +56,8 @@ def fetch_earthquake_data(url):
             utc=True
         )
 
-        # Convert UTC to Indian Standard Time
         ist_time = utc_time.tz_convert("Asia/Kolkata")
 
-        # Classify earthquake by magnitude
         if magnitude >= 5.0:
             category = "High (5.0+)"
         elif magnitude >= 3.0:
@@ -74,58 +71,49 @@ def fetch_earthquake_data(url):
             "Place": properties.get("place", "Unknown"),
             "Magnitude": magnitude,
             "Time UTC": utc_time,
-            "Time IST": ist_time,
+            "Time IST": ist_time.strftime(
+                "%d-%m-%Y %I:%M:%S %p"
+            ),
             "Latitude": coordinates[1],
             "Longitude": coordinates[0],
-            "Depth (km)": coordinates[2] if len(coordinates) > 2 else None,
+            "Depth (km)": (
+                coordinates[2]
+                if len(coordinates) > 2
+                else None
+            ),
             "Category": category
         })
 
     return pd.DataFrame(earthquakes)
 
 
-# -----------------------------------
-# APP TITLE
-# -----------------------------------
-st.title("🌍 Real-Time Earthquake Monitoring Dashboard")
+# ==========================================
+# HEADER
+# ==========================================
+st.title("🌍 Earthquake Intelligence Dashboard")
 
 st.markdown(
     """
-    Monitor earthquake activity using live feeds from the
-    **United States Geological Survey (USGS)**.
+    Monitor earthquake activity worldwide using USGS data.
 
-    The dashboard displays earthquake locations, magnitudes,
-    depth and time in Indian Standard Time (IST).
+    **Live earthquake monitoring | Satellite imagery | Historical analysis**
     """
 )
 
-st.caption(
-    f"Dashboard opened: {datetime.now().strftime('%d %b %Y, %I:%M:%S %p')}"
+# ==========================================
+# SIDEBAR CONTROLS
+# ==========================================
+st.sidebar.title("⚙️ Map Settings")
+
+map_mode = st.sidebar.selectbox(
+    "Choose Map Style",
+    [
+        "Satellite",
+        "Street",
+        "Dark",
+        "OpenStreetMap"
+    ]
 )
-
-# -----------------------------------
-# FETCH DATA
-# -----------------------------------
-try:
-    with st.spinner("Fetching earthquake data from USGS..."):
-
-        realtime_data = fetch_earthquake_data(REALTIME_URL)
-        historical_data = fetch_earthquake_data(HISTORICAL_URL)
-
-except requests.RequestException as error:
-    st.error(f"Unable to fetch earthquake data: {error}")
-    st.info("Check your internet connection and try refreshing the page.")
-    st.stop()
-
-except (ValueError, KeyError, TypeError) as error:
-    st.error(f"Error processing earthquake data: {error}")
-    st.stop()
-
-
-# -----------------------------------
-# SIDEBAR FILTERS
-# -----------------------------------
-st.sidebar.header("⚙️ Dashboard Filters")
 
 min_magnitude = st.sidebar.slider(
     "Minimum Magnitude",
@@ -136,23 +124,25 @@ min_magnitude = st.sidebar.slider(
 )
 
 show_historical = st.sidebar.checkbox(
-    "Show Historical Map",
+    "Show Historical Earthquakes",
     value=True
 )
 
-# Filter data
-filtered_realtime = realtime_data[
-    realtime_data["Magnitude"] >= min_magnitude
-].copy()
+# ==========================================
+# MAP STYLE CONFIGURATION
+# ==========================================
+map_styles = {
+    "Satellite": "satellite",
+    "Street": "carto-positron",
+    "Dark": "carto-darkmatter",
+    "OpenStreetMap": "open-street-map"
+}
 
-filtered_historical = historical_data[
-    historical_data["Magnitude"] >= min_magnitude
-].copy()
+selected_map_style = map_styles[map_mode]
 
-
-# -----------------------------------
-# COLOR MAPPING
-# -----------------------------------
+# ==========================================
+# COLOR CONFIGURATION
+# ==========================================
 color_map = {
     "High (5.0+)": "#FF0000",
     "Moderate (3.0-4.9)": "#FF8C00",
@@ -160,10 +150,56 @@ color_map = {
     "Very Low (<1.0)": "#00C853"
 }
 
+# ==========================================
+# FETCH DATA
+# ==========================================
+try:
 
-# -----------------------------------
-# SUMMARY METRICS
-# -----------------------------------
+    with st.spinner("Loading earthquake data..."):
+
+        realtime_data = fetch_earthquake_data(
+            REALTIME_URL
+        )
+
+        historical_data = fetch_earthquake_data(
+            HISTORICAL_URL
+        )
+
+except requests.RequestException as error:
+
+    st.error(f"Unable to fetch USGS data: {error}")
+    st.stop()
+
+except (ValueError, KeyError, TypeError) as error:
+
+    st.error(f"Error processing earthquake data: {error}")
+    st.stop()
+
+# ==========================================
+# FILTER DATA
+# ==========================================
+if not realtime_data.empty:
+
+    filtered_realtime = realtime_data[
+        realtime_data["Magnitude"] >= min_magnitude
+    ].copy()
+
+else:
+    filtered_realtime = realtime_data.copy()
+
+
+if not historical_data.empty:
+
+    filtered_historical = historical_data[
+        historical_data["Magnitude"] >= min_magnitude
+    ].copy()
+
+else:
+    filtered_historical = historical_data.copy()
+
+# ==========================================
+# STATISTICS
+# ==========================================
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
@@ -174,7 +210,7 @@ with col1:
 
 with col2:
     st.metric(
-        "Filtered (Last Hour)",
+        "Filtered Events",
         len(filtered_realtime)
     )
 
@@ -185,30 +221,30 @@ with col3:
     )
 
 with col4:
+
     strong_count = (
-        realtime_data["Magnitude"] >= 5.0
-    ).sum() if not realtime_data.empty else 0
+        (realtime_data["Magnitude"] >= 5.0).sum()
+        if not realtime_data.empty
+        else 0
+    )
 
     st.metric(
-        "Magnitude 5.0+ (Last Hour)",
+        "Magnitude 5.0+",
         int(strong_count)
     )
 
+# ==========================================
+# MAP FUNCTION
+# ==========================================
+def create_earthquake_map(df, title, height=650):
 
-# -----------------------------------
-# REAL-TIME EARTHQUAKE MAP
-# -----------------------------------
-st.subheader("🔴 Live Earthquake Map — Last Hour")
-
-if not filtered_realtime.empty:
-
-    fig_realtime = px.scatter_map(
-        filtered_realtime,
+    fig = px.scatter_map(
+        df,
         lat="Latitude",
         lon="Longitude",
         color="Category",
         size="Magnitude",
-        size_max=25,
+        size_max=22,
         color_discrete_map=color_map,
         hover_name="Place",
         hover_data={
@@ -220,119 +256,124 @@ if not filtered_realtime.empty:
             "Category": True
         },
         zoom=1,
-        height=650,
-        title="Earthquake Locations — Last Hour",
-        map_style="open-street-map"
+        height=height,
+        map_style=selected_map_style,
+        title=title
     )
 
-    fig_realtime.update_layout(
-        margin=dict(l=0, r=0, t=50, b=0),
-        legend_title_text="Earthquake Magnitude"
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=55, b=0),
+        legend_title_text="Magnitude Category"
+    )
+
+    fig.update_traces(
+        marker={
+            "opacity": 0.9
+        }
+    )
+
+    return fig
+
+# ==========================================
+# REAL-TIME SATELLITE MAP
+# ==========================================
+st.subheader("🛰️ Live Earthquake Satellite Map")
+
+st.caption(
+    "Earthquake events reported by USGS during the last hour."
+)
+
+if not filtered_realtime.empty:
+
+    fig_live = create_earthquake_map(
+        filtered_realtime,
+        "Live Earthquake Locations",
+        height=700
     )
 
     st.plotly_chart(
-    fig_realtime,
-    use_container_width=True,
-    config={
-        "scrollZoom": False,
-        "displayModeBar": True
-    },
-    key="realtime_map"
-)
+        fig_live,
+        use_container_width=True,
+        config={
+            "scrollZoom": True,
+            "displayModeBar": True,
+            "doubleClick": "reset",
+            "responsive": True
+        },
+        key="live_earthquake_map"
+    )
 
 else:
-    st.info("No earthquakes match the selected magnitude filter.")
 
+    st.info(
+        "No earthquakes match the selected magnitude filter."
+    )
 
-# -----------------------------------
-# HISTORICAL EARTHQUAKE MAP
-# -----------------------------------
+# ==========================================
+# HISTORICAL MAP
+# ==========================================
 if show_historical:
 
-    st.subheader("🌎 Historical Earthquake Map — Last Month")
+    st.subheader("🌎 Historical Earthquake Satellite Map")
+
+    st.caption(
+        "Earthquake events reported during the last month."
+    )
 
     if not filtered_historical.empty:
 
-        fig_historical = px.scatter_map(
+        fig_history = create_earthquake_map(
             filtered_historical,
-            lat="Latitude",
-            lon="Longitude",
-            color="Category",
-            size="Magnitude",
-            size_max=20,
-            color_discrete_map=color_map,
-            hover_name="Place",
-            hover_data={
-                "Magnitude": ":.2f",
-                "Depth (km)": ":.1f",
-                "Time IST": True,
-                "Category": True
-            },
-            zoom=1,
-            height=600,
-            title="Earthquake Locations — Last Month",
-            map_style="open-street-map"
-        )
-
-        fig_historical.update_layout(
-            margin=dict(l=0, r=0, t=50, b=0),
-            legend_title_text="Earthquake Magnitude"
+            "Historical Earthquake Locations",
+            height=650
         )
 
         st.plotly_chart(
-    fig_historical,
-    use_container_width=True,
-    config={
-        "scrollZoom": False,
-        "displayModeBar": True
-    },
-    key="historical_map"
-)
+            fig_history,
+            use_container_width=True,
+            config={
+                "scrollZoom": True,
+                "displayModeBar": True,
+                "responsive": True
+            },
+            key="historical_earthquake_map"
+        )
 
     else:
-        st.info("No historical earthquakes match the selected filter.")
 
+        st.info(
+            "No historical earthquakes match the selected filter."
+        )
 
-# -----------------------------------
+# ==========================================
 # MAGNITUDE DISTRIBUTION
-# -----------------------------------
+# ==========================================
 st.subheader("📊 Earthquake Magnitude Distribution")
 
 if not historical_data.empty:
 
-    fig_magnitude = px.histogram(
+    fig_distribution = px.histogram(
         historical_data,
         x="Magnitude",
         nbins=30,
-        title="Earthquake Magnitudes — Last Month",
-        labels={"Magnitude": "Magnitude"},
-        color_discrete_sequence=["#1E88E5"]
+        title="Magnitude Distribution — Last Month",
+        color_discrete_sequence=["#FF8C00"]
     )
 
     st.plotly_chart(
-        fig_magnitude,
+        fig_distribution,
         use_container_width=True
     )
 
-
-# -----------------------------------
-# RAW EARTHQUAKE DATA
-# -----------------------------------
+# ==========================================
+# RECENT EARTHQUAKE TABLE
+# ==========================================
 st.subheader("📋 Recent Earthquake Records")
 
-st.dataframe(
-    filtered_realtime.sort_values(
-        "Time UTC",
-        ascending=False
-    ),
-    use_container_width=True,
-    hide_index=True
-)
-
-with st.expander("View Historical Earthquake Records"):
+if not filtered_realtime.empty:
 
     st.dataframe(
-        filtered_historical.sort_values(
+        filtered_realtime.sort_values(
             "Time UTC",
             ascending=False
         ),
@@ -340,68 +381,94 @@ with st.expander("View Historical Earthquake Records"):
         hide_index=True
     )
 
-
-# -----------------------------------
-# DOWNLOAD CSV
-# -----------------------------------
-if not filtered_realtime.empty:
-
     csv_data = filtered_realtime.to_csv(
         index=False
     ).encode("utf-8")
 
     st.download_button(
-        label="⬇️ Download Recent Earthquake Data (CSV)",
+        "⬇️ Download Earthquake Data",
         data=csv_data,
         file_name="earthquake_data.csv",
         mime="text/csv"
     )
 
+else:
 
-# -----------------------------------
-# SIDEBAR INFORMATION
-# -----------------------------------
+    st.info("No recent records to display.")
+
+# ==========================================
+# HISTORICAL TABLE
+# ==========================================
+with st.expander("View Historical Earthquake Records"):
+
+    if not filtered_historical.empty:
+
+        st.dataframe(
+            filtered_historical.sort_values(
+                "Time UTC",
+                ascending=False
+            ),
+            use_container_width=True,
+            hide_index=True
+        )
+
+    else:
+
+        st.info("No historical records available.")
+
+# ==========================================
+# COLOR LEGEND
+# ==========================================
 st.sidebar.markdown("---")
-st.sidebar.subheader("🎨 Magnitude Color Guide")
+st.sidebar.subheader("🌈 Magnitude Legend")
 
 st.sidebar.markdown(
     """
-    🔴 **Red:** Magnitude 5.0+
+    🔴 **High:** 5.0+
 
-    🟠 **Orange:** Magnitude 3.0–4.9
+    🟠 **Moderate:** 3.0–4.9
 
-    🟡 **Yellow:** Magnitude 1.0–2.9
+    🟡 **Low:** 1.0–2.9
 
-    🟢 **Green:** Magnitude below 1.0
+    🟢 **Very Low:** Below 1.0
     """
 )
 
+# ==========================================
+# DATA SOURCE
+# ==========================================
 st.sidebar.markdown("---")
 
-st.sidebar.info(
+st.sidebar.markdown(
     """
-    **Data Source:** USGS Earthquake Hazards Program
+    **Data Source:** USGS
 
-    Recent feed: Last hour
+    **Live Feed:** Last hour
 
-    Historical feed: Last month
+    **Historical Feed:** Last month
 
-    Timezone: Indian Standard Time (IST)
+    **Timezone:** IST
 
-    Refresh interval: 60 seconds
+    **Cache Duration:** 60 seconds
     """
 )
 
 st.sidebar.caption(
-    "Earthquake data is provided by USGS. "
-    "The dashboard is a monitoring tool, not an earthquake warning system."
+    "This dashboard monitors reported earthquakes. "
+    "It does not predict earthquakes or provide official alerts."
 )
 
-# -----------------------------------
-# AUTO REFRESH
-# -----------------------------------
+# ==========================================
+# REFRESH BUTTON
+# ==========================================
 st.markdown("---")
 
-if st.button("🔄 Refresh Earthquake Data Now"):
+if st.button("🔄 Refresh Earthquake Data"):
+
     st.cache_data.clear()
     st.rerun()
+
+st.caption(
+    f"Last page render: {datetime.now().strftime('%d %b %Y, %I:%M:%S %p')}"
+)
+
